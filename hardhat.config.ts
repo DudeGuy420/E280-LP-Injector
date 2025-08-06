@@ -21,7 +21,7 @@ const config: HardhatUserConfig = {
         hardhat: {
             forking: {
                 url: `https://base-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
-                blockNumber: 28374562,
+                blockNumber: 33847525,
             },
             chainId: 8453,
             initialBaseFeePerGas: 44500,

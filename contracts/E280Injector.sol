@@ -43,8 +43,10 @@ contract E280Injector is Ownable2Step {
     error Prohibited();
     error InjectorDisabled();
     error ZeroAddress();
-    error InsufficientBalance();
     error Unauthorized();
+    error InsufficientBalance();
+    error TokenNotWhitelisted();
+    error DuplicateToken();
 
     // ------------------------------ MODIFIERS ---------------------------- //
 
@@ -61,18 +63,16 @@ contract E280Injector is Ownable2Step {
 
     /// @notice Uses E280 balance to add to the next E280 pair.
     /// @param minAmountOut Minimum amount of Target tokens to receive from E280 swap (in WEI).
-    /// @param amountDesiredE280 Minimum amount of E280 tokens to add to the E280 pair (in WEI).
-    /// @param amountDesiredToken Minimum amount of Target tokens to add to the E280 pair (in WEI).
+    /// @param minAmountAddE280 Minimum amount of E280 tokens to add to the E280 pair (in WEI).
+    /// @param minAmountAddToken Minimum amount of Target tokens to add to the E280 pair (in WEI).
     /// @param deadline Deadline to perform the transaction (in seconds).
-    function inject(
-        uint256 minAmountOut,
-        uint256 amountDesiredE280,
-        uint256 amountDesiredToken,
-        uint256 deadline
-    ) external onlyWhitelisted {
+    function inject(uint256 minAmountOut, uint256 minAmountAddE280, uint256 minAmountAddToken, uint256 deadline)
+        external
+        onlyWhitelisted
+    {
         if (_whitelistedTokens.length() == 0) revert InjectorDisabled();
         if (lastInjection + interval > block.timestamp) revert Cooldown();
-        address tokenAddress =  _whitelistedTokens.at(nextTokenIndex);
+        address tokenAddress = _whitelistedTokens.at(nextTokenIndex);
         IERC20 e280 = IERC20(E280);
         IERC20 token = IERC20(tokenAddress);
         uint256 e280Balance = e280.balanceOf(address(this));
@@ -80,24 +80,27 @@ contract E280Injector is Ownable2Step {
         if (callAmount == 0) revert InsufficientBalance();
 
         lastInjection = block.timestamp;
+        nextTokenIndex++;
+        if (nextTokenIndex == _whitelistedTokens.length()) nextTokenIndex = 0;
+
         callAmount = _processIncentiveFee(callAmount);
 
-        uint256 half = callAmount / 2;
-        uint256 e280InjectionAmount = callAmount - half;
-        _swapFeeToken(E280, tokenAddress, half, minAmountOut, deadline);
+        uint256 amountIn = callAmount / 2;
+        uint256 e280InjectionAmount = callAmount - amountIn;
+        _swapFeeToken(E280, tokenAddress, amountIn, minAmountOut, deadline);
 
         uint256 tokenBalance = token.balanceOf(address(this));
 
         e280.safeIncreaseAllowance(UNISWAP_V2_ROUTER, e280InjectionAmount);
         token.safeIncreaseAllowance(UNISWAP_V2_ROUTER, tokenBalance);
 
-        (uint256 e280Used, uint256 tokenUsed, ) = IUniswapV2Router02(UNISWAP_V2_ROUTER).addLiquidity(
+        (uint256 e280Used, uint256 tokenUsed,) = IUniswapV2Router02(UNISWAP_V2_ROUTER).addLiquidity(
             E280,
             tokenAddress,
             e280InjectionAmount,
             tokenBalance,
-            amountDesiredE280,
-            amountDesiredToken,
+            minAmountAddE280,
+            minAmountAddToken,
             address(0),
             deadline
         );
@@ -117,7 +120,8 @@ contract E280Injector is Ownable2Step {
     /// @notice Adds a new token to the Whitelist.
     /// @param token Address of the Target token.
     function addToken(address token) external onlyOwner {
-        _whitelistedTokens.add(token);
+        if (token == address(0)) revert ZeroAddress();
+        if (!_whitelistedTokens.add(token)) revert DuplicateToken();
         emit SettingsUpdated();
     }
 
@@ -128,7 +132,7 @@ contract E280Injector is Ownable2Step {
             if (nextTokenIndex >= _whitelistedTokens.length()) {
                 nextTokenIndex = 0;
             }
-        }
+        } else revert TokenNotWhitelisted();
         emit SettingsUpdated();
     }
 
@@ -169,7 +173,11 @@ contract E280Injector is Ownable2Step {
     /// @return incentive E280 amount paid out to the caller.
     /// @return nextAvailable Timestamp in seconds when next Injection will be available.
     /// @return nextToken Next token that will be used in the injection.
-    function getInjectionParams() external view returns (uint256 amount, uint256 tokenBalance, uint256 incentive, uint256 nextAvailable, IERC20 nextToken) {
+    function getInjectionParams()
+        external
+        view
+        returns (uint256 amount, uint256 tokenBalance, uint256 incentive, uint256 nextAvailable, IERC20 nextToken)
+    {
         if (_whitelistedTokens.length() == 0) revert InjectorDisabled();
         nextToken = IERC20(_whitelistedTokens.at(nextTokenIndex));
         uint256 e280Balance = IERC20(E280).balanceOf(address(this));
@@ -187,13 +195,9 @@ contract E280Injector is Ownable2Step {
         return amount - incentive;
     }
 
-    function _swapFeeToken(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        uint256 minAmountOut,
-        uint256 deadline
-    ) internal {
+    function _swapFeeToken(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut, uint256 deadline)
+        internal
+    {
         IERC20(tokenIn).safeIncreaseAllowance(UNISWAP_V2_ROUTER, amountIn);
 
         address[] memory path = new address[](2);
@@ -201,11 +205,7 @@ contract E280Injector is Ownable2Step {
         path[1] = tokenOut;
 
         IUniswapV2Router02(UNISWAP_V2_ROUTER).swapExactTokensForTokensSupportingFeeOnTransferTokens(
-            amountIn,
-            minAmountOut,
-            path,
-            address(this),
-            deadline
+            amountIn, minAmountOut, path, address(this), deadline
         );
     }
 }
