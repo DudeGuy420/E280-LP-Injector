@@ -34,9 +34,18 @@ const config: HardhatUserConfig = {
             accounts: [process.env.PRIVATE_KEY!],
             timeout: 999999,
         },
+        bsc: {
+            url: `https://bnb-mainnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
+            accounts: [process.env.PRIVATE_KEY!],
+            timeout: 999999,
+        },
     },
     etherscan: {
-        apiKey: process.env.BASE_ETHERSCAN_KEY,
+        apiKey: {
+            mainnet: process.env.ETHERSCAN_KEY!,
+            base: process.env.BASE_ETHERSCAN_KEY!,
+            bsc: process.env.BSC_EXPL_KEY!,
+        },
     },
     gasReporter: {
         enabled: true,
