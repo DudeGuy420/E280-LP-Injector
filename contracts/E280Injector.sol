@@ -19,16 +19,16 @@ contract E280Injector is Ownable2Step {
     uint16 public nextTokenIndex;
 
     /// @notice Basis point incentive fee paid out for calling Inject function.
-    uint16 public incentiveFeeBps = 3;
+    uint16 public incentiveFeeBps = 10;
 
     /// @notice Cooldown interval for injection calls in seconds.
-    uint32 public interval = 60 minutes;
+    uint32 public interval = 4 hours;
 
     /// @notice Timestamp of the last performed injection.
     uint256 public lastInjection;
 
     /// @notice Maximum amount of E280 to be swapped and then injected in a single call.
-    uint256 public capPerCall = 1_000_000_000 ether;
+    uint256 public capPerCall = 888_000_000 ether;
 
     EnumerableSet.AddressSet private _whitelistedTokens;
 
